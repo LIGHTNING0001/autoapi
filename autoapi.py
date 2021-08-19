@@ -15,8 +15,11 @@ def get_cookie(url, headers, data):
     :param data: 根据具体登录接口 构造 data 参数， 以字典方式保存
     :return: 返回cookie
     """
-    resp = requests.post(url=url, data=data, headers=headers)
-    return resp.cookies
+    try:
+        resp = requests.post(url=url, data=data, headers=headers)
+        return resp.cookies
+    except requests.exceptions.RequestException as e:
+        print('获取 cookie 失败')
 
 
 def read_excel(file):
@@ -31,6 +34,7 @@ def read_excel(file):
         return tables
     except Exception as e:
         print('Error: ', e)
+        print(f'读取{file}', file)
 
 
 def get_testcases(tables):
@@ -85,7 +89,7 @@ def get_testcase(tables, index_table, start, stop):
             tmp.append(table.cell_value(i, 8))  # 预期结果
             res.append(tmp)
         return res
-    except IndexError as e:
+    except Exception as e:
         print('Error: ', e)
 
 
@@ -134,80 +138,92 @@ def send_request(cases, cookies):
     casepass = 0    # 通过的测试用例数
     casefail = 0    # 失败的测试用例数
     for case in cases:
-        # case[1] :url
-        # case[2]: data
-        # case[3]: headers
+
         print(f'\033[1;32m 正在执行：测试用例{case[0]}', end='\t \033[0m')
-        try:
-            if str(case[4]).lower() == 'get':
-                result = requests.get(url=case[1], data=case[2], headers=case[3], cookies=cookies)
+
+        if str(case[4]).lower() == 'get':
+            result = requests.get(url=case[1], data=case[2], headers=case[3], cookies=cookies, timeout=8)
+            try:
                 assert result.text == case[5]
-            elif str(case[4]).lower() == 'post':
-                result = requests.post(url=case[1], data=case[2], headers=case[3], cookies=cookies)
+            except AssertionError as e:
+                print('expect: ', case[5])
+                print('result: ', result.text)
+                print('\033[1;31m Error \033[0m', e, end='  ')
+                print('\033[1;31m测试用例未通过\033[0m')
+                casefail += 1
+                continue
+        elif str(case[4]).lower() == 'post':
+            result = requests.post(url=case[1], data=case[2], headers=case[3], cookies=cookies, timeout=8)
+            try:
                 assert result.text == case[5]
-        except Exception as e:
-            print('\033[1;31m Error \033[0m', e, end='  ')
-            print('\033[1;31m测试用例未通过\033[0m')
-            casefail += 1
-        else:
-            print(f'\033[1;32m =========>  测试用例{case[0]}通过\033[0m')
-            casepass += 1
+            except AssertionError as e:
+                print('expect: ', case[5])
+                print('result: ', result.text)
+                print('\033[1;31m Error \033[0m', e, end='  ')
+                print('\033[1;31m测试用例未通过\033[0m')
+                casefail += 1
+                continue
+
+        print(f'\033[1;32m =========>  测试用例{case[0]}通过\033[0m')
+        casepass += 1
+
     print(f'共执行测试用例: {count}, 通过：{casepass}, 未通过： {casefail}')
 
 
+def get_table_row(tables, index):
+    """ 获取行数 """
+    return tables[index].nrows
+
+
+def get_tables_len(tables):
+    """ 获取工作表的数量 """
+    return len(tables)
+
+
 def execute_apis(file, *, cookies):
-    """ 执行全部用例 """
+    """
+    执行全部用例
+    :param file: 要执行的接口文档
+    :param cookies: cookie
+    """
     tables = read_excel(file)
     cases = get_testcases(tables)
     send_request(cases, cookies)
 
 
 def execute_api(*, file, cookies, index_table=0, start, stop):
-    """ 执行部分测试用例 """
+    """
+    选择部分测试用例执行
+    :param file: 要执行的接口文档
+    :param cookies: cookie
+    :param index_table: sheet工作表的索引，从0开始
+    :param start:  开始执行的excel表的行标
+    :param stop:  结束执行的行标 不包括 0
+    """
+
     tables = read_excel(file)
+
+    if index_table >= get_tables_len(tables):
+        print('不存在此工作表')
+        return
+
+    if start >= 1:
+        if stop > get_table_row(tables, index_table):
+            print('结束行标大于实际行数')
+            return
+    else:
+        print('开始行标应大于0')
+        return
+
     cases = get_testcase(tables, index_table, start, stop)
     send_request(cases, cookies)
 
 
 if __name__ == '__main__':
-    # # result = convert_urlpara_to_dict('username=zhangsan&password=1233456')
-    # # result = convert_urlpara_to_dict('username=&')
-    # headers = """uername:zhangsan
-    #             password:123456
-    # """
-    # result = convert_headers_to_dict(headers)
-    # print(result)
-    # execute_apis('接口测试用例.xls')
-    #execute_api('接口测试用例.xls', 0, 2, 3, get_cookie())
-
-    # url = 'http://192.168.0.108:8080/woniusales/user/login'
-    # data = {'username': 'admin', 'password': 'admin123', 'verifycode': '000'}
-    # headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    # resp = get_cookie(url, headers, data)
-    # print(resp)
-    dt = '{ \
-         "username": { \
-                        "lastname": "li", \
-                        "firstname": "si" \
-                    }, \
-         "password": "123456" \
-         }'
-    # jsonData = '{"a":1,"b":2,"c":3,"d":4,"e":5}';
-    data = json.loads(dt)
-    print(data)
-
-    # dictstr = '{ \
-    #               username:lisi, \
-    #               password: 1234, \
-    #               verifycode: 000 \
-    #               }'
-    # tmp = dictstr.lstrip('{').strip('}').strip()
-    # tmp = tmp.split(',')
-    # rlt = {}
-    # for line in tmp:
-    #     tmp = line.split(':')
-    #     rlt[tmp[0].strip()] = tmp[1].strip()
     pass
 
+# 问题：
+# 设置请求超时
+# 边界检查
 
 
