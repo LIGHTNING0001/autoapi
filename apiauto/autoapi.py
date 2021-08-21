@@ -7,7 +7,7 @@ import xlrd
 import requests
 
 
-def get_cookie(url, headers, data):
+def get_cookie_inner(url, headers, data):
     """
     获取cookie
     :param url: 接口地址
@@ -26,7 +26,7 @@ def read_excel(file):
     """
     读取Excel表 获取工作表
     :param file: 文件对象
-    :return: 包含工作表的列表
+    :return: tables
     """
     try:
         xl = xlrd.open_workbook(file)
@@ -45,6 +45,7 @@ def get_testcases(tables):
     """
     res = []
     for table in tables:
+        t = []
         for i in range(1, table.nrows):     # 从表的第一个测试用例开始获取
             tmp = []
             '''
@@ -62,7 +63,8 @@ def get_testcases(tables):
             tmp.append(convert_headers_to_dict(table.cell_value(i, 6)))     # headers
             tmp.append(table.cell_value(i, 7))  # method
             tmp.append(table.cell_value(i, 8))  # 预期结果
-            res.append(tmp)
+            t.append(tmp)
+        res.append(t)
     return res
 
 
@@ -78,7 +80,7 @@ def get_testcase(tables, index_table, start, stop):
     res = []
     try:
         table = tables[index_table]
-        for i in range(start, stop):
+        for i in range(start - 1, stop - 1):
             tmp = []
             tmp.append(int(table.cell_value(i, 0)))  # 用例编号
             tmp.append(table.cell_value(i, 4))  # url
@@ -141,29 +143,28 @@ def send_request(cases, cookies):
 
         print(f'\033[1;32m 正在执行：测试用例{case[0]}', end='\t \033[0m')
 
-        if str(case[4]).lower() == 'get':
-            result = requests.get(url=case[1], data=case[2], headers=case[3], cookies=cookies, timeout=8)
-            try:
-                assert result.text == case[5]
-            except AssertionError as e:
-                print('expect: ', case[5])
-                print('result: ', result.text)
-                print('\033[1;31m Error \033[0m', e, end='  ')
-                print('\033[1;31m测试用例未通过\033[0m')
-                casefail += 1
-                continue
-        elif str(case[4]).lower() == 'post':
-            result = requests.post(url=case[1], data=case[2], headers=case[3], cookies=cookies, timeout=8)
-            try:
-                assert result.text == case[5]
-            except AssertionError as e:
-                print('expect: ', case[5])
-                print('result: ', result.text)
-                print('\033[1;31m Error \033[0m', e, end='  ')
-                print('\033[1;31m测试用例未通过\033[0m')
-                casefail += 1
-                continue
-
+        try:
+            result = requests.request(
+                method=case[4],
+                url=case[1],
+                data=case[2],
+                headers=case[3],
+                cookies=cookies,
+                timeout=5
+            )
+            assert result.text == case[5]
+        except AssertionError as e:
+            print('expect: ', case[5])
+            print('result: ', result.text)
+            print('\033[1;31m Error \033[0m', e, end='  ')
+            print('\033[1;31m测试用例未通过\033[0m')
+            casefail += 1
+            continue
+        except TimeoutError:
+            print('连接超时')
+        except Exception:
+            print('\033[1;31m 用例执行异常 !!!\033[0m')
+            continue
         print(f'\033[1;32m =========>  测试用例{case[0]}通过\033[0m')
         casepass += 1
 
@@ -180,18 +181,22 @@ def get_tables_len(tables):
     return len(tables)
 
 
-def execute_apis(file, *, cookies):
+def execute_apis_xls(file, cookies):
     """
     执行全部用例
     :param file: 要执行的接口文档
     :param cookies: cookie
     """
     tables = read_excel(file)
-    cases = get_testcases(tables)
-    send_request(cases, cookies)
+    list_cases = get_testcases(tables)
+    n = 0
+    for i in range(len(tables)):
+        print('*' * 50, f'执行第{i}个工作表', '*' * 50)
+        send_request(list_cases[i], cookies)
+        n += 1
 
 
-def execute_api(*, file, cookies, index_table=0, start, stop):
+def execute_api_xls(file, cookies, *, index_table=0, start, stop):
     """
     选择部分测试用例执行
     :param file: 要执行的接口文档
@@ -208,7 +213,7 @@ def execute_api(*, file, cookies, index_table=0, start, stop):
         return
 
     if start >= 1:
-        if stop > get_table_row(tables, index_table):
+        if stop > get_table_row(tables, index_table) + 1:
             print('结束行标大于实际行数')
             return
     else:
@@ -220,6 +225,11 @@ def execute_api(*, file, cookies, index_table=0, start, stop):
 
 
 if __name__ == '__main__':
+    url = 'http://192.168.13.41:8080/woniusales/user/login'
+    data = {'username': 'admin', 'password': 'admin123', 'verifycode': '000'}
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+
+    execute_apis_xls('../接口测试用例.xls', cookies=get_cookie_inner(url, data, headers))
     pass
 
 # 问题：
