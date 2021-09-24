@@ -5,13 +5,6 @@ __author__ = 'lishanjie'
 import json
 import xlrd
 import requests
-import pytest
-import dbtools
-import time
-
-conn = dbtools.ConnTools()
-
-token = None
 
 
 def get_cookie_inner(url, headers, data):
@@ -36,7 +29,9 @@ def read_excel(file):
     :return: tables
     """
     try:
-        return xlrd.open_workbook(file).sheets()
+        xl = xlrd.open_workbook(file)
+        tables = xl.sheets()
+        return tables
     except Exception as e:
         print('Error: ', e)
         print(f'读取{file}', file)
@@ -101,7 +96,7 @@ def get_testcase(tables, index_table, start, stop):
 
 
 def convert_urlpara_to_dict(param_data):
-    """ 转换url 参数 为字典
+    """ 转换url 参数
     :param param_data:
     :return:
     """
@@ -118,7 +113,7 @@ def convert_urlpara_to_dict(param_data):
 
 
 def convert_headers_to_dict(headers_data):
-    """ 转换 头部信息 为字典
+    """ 转换 头部信息
     :param headers_data:
     :return:
     """
@@ -141,48 +136,53 @@ def send_request(cases, cookies):
     :param cases:
     :param cookies:
     """
-
     count = len(cases)  # 总共的测试用例
     casepass = 0    # 通过的测试用例数
     casefail = 0    # 失败的测试用例数
-
-    sql = "insert into result(cid, app, version, actual, expect, test_result, create_datetime) values "
-
     for case in cases:
 
         print(f'\033[1;32m 正在执行：测试用例{case[0]}', end='\t \033[0m')
 
         try:
-            result = requests.request(
-                method=case[4],
-                url=case[1],
-                data=case[2],
-                headers=case[3],
-                cookies=cookies,
-                timeout=5
-            )
+            result = requests.request(method=case[4], url=case[1], data=case[2], headers=case[3], cookies=cookies)
             assert result.text == case[5]
+        except ConnectionError:
+            print('连接异常')
         except AssertionError as e:
             print('expect: ', case[5])
             print('result: ', result.text)
             print('\033[1;31m Error \033[0m', e, end='  ')
             print('\033[1;31m测试用例未通过\033[0m')
-            act_result = f'测试用例未通过, {e}'
-            sql += f"({case[0]}, 'woniusales', 'v1', '{result.text[:30]}', '{case[5]}', '{act_result}', '{get_time()}'),"
             casefail += 1
             continue
-        except TimeoutError:
-            print('连接超时')
-        except Exception:
-            print('\033[1;31m 用例执行异常 !!!\033[0m')
-            sql += f"({case[0]}, 'woniusales', 'v1', '用例执行异常 !!!', '{case[5]}', '测试用例未通过', '{get_time()}'),"
-            continue
+
+        # if str(case[4]).lower() == 'get':
+        #     result = requests.get(url=case[1], data=case[2], headers=case[3], cookies=cookies)
+        #     try:
+        #         assert result.text == case[5]
+        #     except AssertionError as e:
+        #         print('expect: ', case[5])
+        #         print('result: ', result.text)
+        #         print('\033[1;31m Error \033[0m', e, end='  ')
+        #         print('\033[1;31m测试用例未通过\033[0m')
+        #         casefail += 1
+        #         continue
+        # elif str(case[4]).lower() == 'post':
+        #     result = requests.post(url=case[1], data=case[2], headers=case[3], cookies=cookies)
+        #     try:
+        #         assert result.text == case[5]
+        #     except AssertionError as e:
+        #         print('expect: ', case[5])
+        #         print('result: ', result.text)
+        #         print('\033[1;31m Error \033[0m', e, end='  ')
+        #         print('\033[1;31m测试用例未通过\033[0m')
+        #         casefail += 1
+        #         continue
+
         print(f'\033[1;32m =========>  测试用例{case[0]}通过\033[0m')
-        sql += f"({case[0]}, 'woniusales', 'v1', '{case[5]}', '{case[5]}', '测试用例通过', '{get_time()}'),"
         casepass += 1
+
     print(f'共执行测试用例: {count}, 通过：{casepass}, 未通过： {casefail}')
-    sql = sql[:-1]
-    conn.updata(sql)
 
 
 def get_table_row(tables, index):
@@ -237,36 +237,8 @@ def execute_api_xls(file, cookies, *, index_table=0, start, stop):
     cases = get_testcase(tables, index_table, start, stop)
     send_request(cases, cookies)
 
-# 获取当前时间
-def get_time():
-    return time.strftime('%Y-%m-%d %H-%M-%S', time.localtime())
-
-
-# 获取参数列表
-def get_data():
-    data = None
-    return data
-
-
-# 每次执行一条用例
-def execute_case(case):
-    pass
-
-
-@pytest.mark.parametrize('case', get_data())
-def test_auto(case):
-    params, expect = case
-    result = execute_case(params)
-    assert result == expect
-
 
 if __name__ == '__main__':
-
-    url = 'http://172.16.102.3:8080/woniusales/user/login'
-    data = {'username': 'admin', 'password': 'admin123', 'verifycode': '000'}
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-    execute_apis_xls('../接口测试用例.xls', cookies=get_cookie_inner(url, data, headers))
-    conn.close()
     pass
 
 # 问题：

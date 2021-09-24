@@ -1,0 +1,11 @@
+setup.py
+apiauto/__init__.py
+apiauto/api.py
+apiauto/autoapi.py
+apiauto.egg-info/PKG-INFO
+apiauto.egg-info/SOURCES.txt
+apiauto.egg-info/dependency_links.txt
+apiauto.egg-info/requires.txt
+apiauto.egg-info/top_level.txt
+test/__init__.py
+test/test_autoapi.py
